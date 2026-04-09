@@ -1,30 +1,34 @@
 #!/usr/bin/env python3
-"""Spotify Web API helper — token refresh, search, playlists, playback, library.
+"""Spotify Web API helper — Feb 2026 API compliant.
 
-Can be imported as a module or run standalone for testing.
+Can be imported as a module or run as CLI.
 
-Usage as CLI:
-    python3 spotify-api.py search "Bohemian Rhapsody"
-    python3 spotify-api.py now-playing
-    python3 spotify-api.py pause
-    python3 spotify-api.py play
-    python3 spotify-api.py skip
-    python3 spotify-api.py queue "spotify:track:xxx"
-    python3 spotify-api.py playlists
-    python3 spotify-api.py create-playlist "My Playlist" --description "desc" --public
-    python3 spotify-api.py add-to-playlist PLAYLIST_ID spotify:track:xxx spotify:track:yyy
-    python3 spotify-api.py top-tracks
-    python3 spotify-api.py recent
+CLI usage:
+    python3 spotify_api.py search "Bohemian Rhapsody"
+    python3 spotify_api.py now-playing
+    python3 spotify_api.py play | pause | skip | previous
+    python3 spotify_api.py queue "spotify:track:xxx"
+    python3 spotify_api.py devices
+    python3 spotify_api.py playlists
+    python3 spotify_api.py create-playlist "My Playlist" --description "desc" --public
+    python3 spotify_api.py add-to-playlist PLAYLIST_ID spotify:track:xxx spotify:track:yyy
+    python3 spotify_api.py remove-from-playlist PLAYLIST_ID spotify:track:xxx
+    python3 spotify_api.py top-tracks [--range short_term|medium_term|long_term]
+    python3 spotify_api.py top-artists [--range short_term|medium_term|long_term]
+    python3 spotify_api.py recent
+    python3 spotify_api.py save spotify:track:xxx spotify:album:yyy
+    python3 spotify_api.py unsave spotify:track:xxx
 
-Environment / config:
+Config (env vars or defaults):
     SPOTIFY_TOKEN_FILE  — path to token JSON (default: ~/.openclaw/.spotify-token.json)
     SPOTIFY_CREDENTIALS — path to credentials file (default: ~/.openclaw/.spotify-credentials)
-    Or set SPOTIFY_CLIENT_ID + SPOTIFY_CLIENT_SECRET as env vars.
+    SPOTIFY_CLIENT_ID + SPOTIFY_CLIENT_SECRET — alternative to credentials file
 """
 
 import base64
 import json
 import os
+import stat
 import sys
 import time
 import urllib.error
@@ -38,12 +42,23 @@ CREDS_FILE = os.environ.get("SPOTIFY_CREDENTIALS", os.path.expanduser("~/.opencl
 
 # ── Credentials & Tokens ────────────────────────────────────────────
 
+def _check_file_permissions(path, label="file"):
+    """Warn if sensitive file is world-readable."""
+    try:
+        mode = os.stat(path).st_mode
+        if mode & (stat.S_IRGRP | stat.S_IROTH):
+            print(f"⚠️  Warning: {label} ({path}) is readable by others. Run: chmod 600 {path}", file=sys.stderr)
+    except OSError:
+        pass
+
+
 def load_credentials():
     """Load client_id and client_secret from env or credentials file."""
     client_id = os.environ.get("SPOTIFY_CLIENT_ID")
     client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
 
     if (not client_id or not client_secret) and os.path.exists(CREDS_FILE):
+        _check_file_permissions(CREDS_FILE, "credentials file")
         with open(CREDS_FILE) as f:
             for line in f:
                 line = line.strip()
@@ -64,12 +79,13 @@ def load_credentials():
 
 def load_tokens():
     """Load token JSON from file."""
+    _check_file_permissions(TOKEN_FILE, "token file")
     with open(TOKEN_FILE) as f:
         return json.load(f)
 
 
 def save_tokens(tokens):
-    """Persist token JSON."""
+    """Persist token JSON with restricted permissions."""
     os.makedirs(os.path.dirname(os.path.abspath(TOKEN_FILE)), exist_ok=True)
     with open(TOKEN_FILE, "w") as f:
         json.dump(tokens, f, indent=2)
@@ -77,7 +93,7 @@ def save_tokens(tokens):
 
 
 def refresh_access_token(tokens=None):
-    """Refresh the access token using the refresh_token grant. Returns updated tokens dict."""
+    """Refresh the access token using the refresh_token grant."""
     if tokens is None:
         tokens = load_tokens()
     client_id, client_secret = load_credentials()
@@ -108,7 +124,7 @@ def refresh_access_token(tokens=None):
 
 
 def get_token():
-    """Return a valid access token, refreshing if needed."""
+    """Return a valid access token, refreshing if near expiry."""
     tokens = load_tokens()
     refreshed_at = tokens.get("_refreshed_at", 0)
     expires_in = tokens.get("expires_in", 3600)
@@ -136,8 +152,11 @@ def _request(method, url, token, data=None, retry_auth=True):
         if e.code == 401 and retry_auth:
             new_tokens = refresh_access_token()
             return _request(method, url, new_tokens["access_token"], data, retry_auth=False)
-        if e.code == 204:
-            return {}
+        if e.code == 429:
+            retry_after = int(e.headers.get("Retry-After", "5"))
+            print(f"Rate limited. Waiting {retry_after}s...", file=sys.stderr)
+            time.sleep(retry_after)
+            return _request(method, url, token, data, retry_auth=retry_auth)
         raise
 
 
@@ -167,7 +186,8 @@ def api_delete(path, token=None, data=None):
 # ── Search ───────────────────────────────────────────────────────────
 
 def search(query, types="track", limit=5):
-    """Search Spotify. types: track,album,artist (comma-separated)."""
+    """Search Spotify. types: track,album,artist (comma-separated). Max limit: 10 (Feb 2026)."""
+    limit = min(limit, 10)  # Feb 2026: max reduced from 50 to 10
     return api_get("/search", params={"q": query, "type": types, "limit": limit})
 
 
@@ -179,7 +199,7 @@ def now_playing():
 
 
 def play(context_uri=None, uris=None, device_id=None):
-    """Start/resume playback. Optionally pass context_uri (album/playlist) or uris (list of track URIs)."""
+    """Start/resume playback."""
     data = {}
     if context_uri:
         data["context_uri"] = context_uri
@@ -187,7 +207,7 @@ def play(context_uri=None, uris=None, device_id=None):
         data["uris"] = uris
     path = "/me/player/play"
     if device_id:
-        path += f"?device_id={device_id}"
+        path += f"?device_id={urllib.parse.quote(device_id)}"
     return api_put(path, data=data or None)
 
 
@@ -212,7 +232,7 @@ def devices():
     return api_get("/me/player/devices")
 
 
-# ── Playlists (Feb 2026 API — uses /items not /tracks) ──────────────
+# ── Playlists (Feb 2026 API — /items not /tracks) ───────────────────
 
 def my_playlists(limit=50):
     return api_get("/me/playlists", params={"limit": limit})
@@ -231,8 +251,8 @@ def get_playlist_items(playlist_id, limit=100, offset=0):
 
 
 def create_playlist(name, description="", public=False):
-    me = api_get("/me")
-    return api_post(f"/users/{me['id']}/playlists", data={
+    """Create a playlist for the current user. Uses POST /me/playlists (Feb 2026 API)."""
+    return api_post("/me/playlists", data={
         "name": name,
         "description": description,
         "public": public,
@@ -240,7 +260,7 @@ def create_playlist(name, description="", public=False):
 
 
 def add_to_playlist(playlist_id, uris):
-    """Add items to playlist. Uses /items endpoint (Feb 2026 API)."""
+    """Add items to playlist. Uses /items endpoint (Feb 2026 API). Max 100 per call."""
     return api_post(f"/playlists/{playlist_id}/items", data={"uris": uris})
 
 
@@ -250,22 +270,29 @@ def remove_from_playlist(playlist_id, uris):
     return api_delete(f"/playlists/{playlist_id}/items", data={"items": items})
 
 
-# ── Library (Feb 2026 API — uses /me/library) ────────────────────────
+# ── Library (Feb 2026 API — unified /me/library) ─────────────────────
 
-def save_to_library(ids, item_type="tracks"):
-    """Save items. ids: list of Spotify IDs. item_type: tracks, albums, episodes."""
-    return api_put(f"/me/{item_type}", data={"ids": ids})
-
-
-def remove_from_library(ids, item_type="tracks"):
-    return api_delete(f"/me/{item_type}", data={"ids": ids})
+def save_to_library(uris):
+    """Save items to library. Accepts Spotify URIs (e.g. spotify:track:xxx). Feb 2026 unified endpoint."""
+    return api_put("/me/library", data={"uris": uris})
 
 
-def check_saved(ids, item_type="tracks"):
-    return api_get(f"/me/{item_type}/contains", params={"ids": ",".join(ids)})
+def remove_from_library(uris):
+    """Remove items from library. Accepts Spotify URIs. Feb 2026 unified endpoint."""
+    return api_delete("/me/library", data={"uris": uris})
+
+
+def check_saved(uris):
+    """Check if items are in library. Accepts Spotify URIs. Feb 2026 unified endpoint."""
+    return api_get("/me/library/contains", params={"uris": ",".join(uris)})
 
 
 # ── User Data ────────────────────────────────────────────────────────
+
+def me():
+    """Get current user profile."""
+    return api_get("/me")
+
 
 def top_tracks(time_range="medium_term", limit=20):
     return api_get("/me/top/tracks", params={"time_range": time_range, "limit": limit})
@@ -288,10 +315,11 @@ def _fmt_track(t):
 
 def cli():
     if len(sys.argv) < 2:
-        print("Usage: spotify-api.py <command> [args]")
+        print("Usage: spotify_api.py <command> [args]")
         print("Commands: search, now-playing, play, pause, skip, previous, queue,")
         print("          devices, playlists, create-playlist, add-to-playlist,")
-        print("          top-tracks, top-artists, recent")
+        print("          remove-from-playlist, top-tracks, top-artists, recent,")
+        print("          save, unsave")
         sys.exit(1)
 
     cmd = sys.argv[1]
@@ -330,7 +358,7 @@ def cli():
 
         elif cmd == "queue":
             if len(sys.argv) < 3:
-                print("Usage: spotify-api.py queue <spotify:track:URI>")
+                print("Usage: spotify_api.py queue <spotify:track:URI>")
                 sys.exit(1)
             queue(sys.argv[2])
             print(f"Queued: {sys.argv[2]}")
@@ -344,8 +372,8 @@ def cli():
         elif cmd == "playlists":
             r = my_playlists()
             for p in r.get("items", []):
-                total = (p.get('tracks') or p.get('items') or {}).get('total', '?')
-                print(f"  {p['name']} ({total} tracks) [{p['id']}]")
+                total = (p.get("items") or {}).get("total", "?")
+                print(f"  {p['name']} ({total} items) [{p['id']}]")
 
         elif cmd == "create-playlist":
             name = sys.argv[2] if len(sys.argv) > 2 else input("Playlist name: ")
@@ -362,20 +390,37 @@ def cli():
 
         elif cmd == "add-to-playlist":
             if len(sys.argv) < 4:
-                print("Usage: spotify-api.py add-to-playlist PLAYLIST_ID uri1 uri2 ...")
+                print("Usage: spotify_api.py add-to-playlist PLAYLIST_ID uri1 uri2 ...")
                 sys.exit(1)
             pid = sys.argv[2]
             uris = sys.argv[3:]
             add_to_playlist(pid, uris)
             print(f"Added {len(uris)} items to {pid}")
 
+        elif cmd == "remove-from-playlist":
+            if len(sys.argv) < 4:
+                print("Usage: spotify_api.py remove-from-playlist PLAYLIST_ID uri1 uri2 ...")
+                sys.exit(1)
+            pid = sys.argv[2]
+            uris = sys.argv[3:]
+            remove_from_playlist(pid, uris)
+            print(f"Removed {len(uris)} items from {pid}")
+
         elif cmd == "top-tracks":
-            r = top_tracks()
+            tr = "medium_term"
+            if "--range" in sys.argv:
+                idx = sys.argv.index("--range")
+                tr = sys.argv[idx + 1] if idx + 1 < len(sys.argv) else tr
+            r = top_tracks(time_range=tr)
             for i, t in enumerate(r.get("items", []), 1):
                 print(f"  {i}. {_fmt_track(t)}")
 
         elif cmd == "top-artists":
-            r = top_artists()
+            tr = "medium_term"
+            if "--range" in sys.argv:
+                idx = sys.argv.index("--range")
+                tr = sys.argv[idx + 1] if idx + 1 < len(sys.argv) else tr
+            r = top_artists(time_range=tr)
             for i, a in enumerate(r.get("items", []), 1):
                 print(f"  {i}. {a['name']} ({', '.join(a.get('genres', [])[:3])})")
 
@@ -384,6 +429,22 @@ def cli():
             for item in r.get("items", []):
                 t = item["track"]
                 print(f"  {_fmt_track(t)}  [{item.get('played_at', '')}]")
+
+        elif cmd == "save":
+            if len(sys.argv) < 3:
+                print("Usage: spotify_api.py save spotify:track:xxx spotify:album:yyy ...")
+                sys.exit(1)
+            uris = sys.argv[2:]
+            save_to_library(uris)
+            print(f"Saved {len(uris)} items to library")
+
+        elif cmd == "unsave":
+            if len(sys.argv) < 3:
+                print("Usage: spotify_api.py unsave spotify:track:xxx ...")
+                sys.exit(1)
+            uris = sys.argv[2:]
+            remove_from_library(uris)
+            print(f"Removed {len(uris)} items from library")
 
         else:
             print(f"Unknown command: {cmd}")

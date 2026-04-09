@@ -1,1 +1,10 @@
 __pycache__/
+*.pyc
+*.pyo
+
+# Credentials and tokens — NEVER commit these
+.spotify-credentials
+.spotify-token.json
+*token*.json
+*credentials*
+!spotify/references/*

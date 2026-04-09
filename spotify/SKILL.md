@@ -5,7 +5,7 @@ description: Control Spotify — search, playlists, playback, library, user data
 
 # Spotify
 
-Control Spotify via the Web API. All operations use `scripts/spotify-api.py` (stdlib only, no pip deps).
+Control Spotify via the Web API. All operations use `scripts/spotify_api.py` (stdlib only, no pip deps).
 
 ## Setup
 
@@ -14,6 +14,7 @@ Before first use, the user must:
 1. **Create a Spotify app** at <https://developer.spotify.com/dashboard>
    - Set redirect URI to `http://127.0.0.1:8888/callback`
    - Note the Client ID and Client Secret
+   - **Add their Spotify email** in Settings → User Management
 
 2. **Save credentials** to `~/.openclaw/.spotify-credentials`:
    ```
@@ -30,63 +31,50 @@ Before first use, the user must:
 
 If setup is not done, guide the user through these steps. The auth flow needs a browser — if running headless, print the URL for the user to open manually.
 
-## Dev Mode Limitations
+## Dev Mode Limitations (Feb 2026)
 
-New Spotify apps start in Dev Mode:
 - Premium required for the app owner
 - Max 5 authorized users
 - 1 client ID per developer account
+- Many endpoints removed or renamed — see `references/api-changes-2026.md`
 
-For broader access, the app must be submitted for quota extension.
-
-## Using the API Script
-
-`scripts/spotify-api.py` works both as CLI and importable module.
-
-### CLI usage
+## CLI Usage
 
 ```bash
-python3 scripts/spotify-api.py search "Bohemian Rhapsody"
-python3 scripts/spotify-api.py now-playing
-python3 scripts/spotify-api.py play
-python3 scripts/spotify-api.py pause
-python3 scripts/spotify-api.py skip
-python3 scripts/spotify-api.py queue "spotify:track:xxx"
-python3 scripts/spotify-api.py playlists
-python3 scripts/spotify-api.py create-playlist "My Playlist" --description "desc"
-python3 scripts/spotify-api.py add-to-playlist PLAYLIST_ID spotify:track:xxx
-python3 scripts/spotify-api.py top-tracks
-python3 scripts/spotify-api.py recent
-python3 scripts/spotify-api.py devices
+python3 scripts/spotify_api.py search "Bohemian Rhapsody"
+python3 scripts/spotify_api.py now-playing
+python3 scripts/spotify_api.py play | pause | skip | previous
+python3 scripts/spotify_api.py queue "spotify:track:xxx"
+python3 scripts/spotify_api.py devices
+python3 scripts/spotify_api.py playlists
+python3 scripts/spotify_api.py create-playlist "My Playlist" --description "desc"
+python3 scripts/spotify_api.py add-to-playlist PLAYLIST_ID spotify:track:xxx
+python3 scripts/spotify_api.py remove-from-playlist PLAYLIST_ID spotify:track:xxx
+python3 scripts/spotify_api.py top-tracks [--range short_term|medium_term|long_term]
+python3 scripts/spotify_api.py top-artists [--range short_term|medium_term|long_term]
+python3 scripts/spotify_api.py recent
+python3 scripts/spotify_api.py save spotify:track:xxx spotify:album:yyy
+python3 scripts/spotify_api.py unsave spotify:track:xxx
 ```
 
-### As module (from Python)
+## Module Usage
 
 ```python
-import importlib.util, sys
-spec = importlib.util.spec_from_file_location("spotify", "scripts/spotify-api.py")
+import importlib.util, sys, pathlib
+spec = importlib.util.spec_from_file_location("spotify_api", pathlib.Path(__file__).parent / "scripts/spotify_api.py")
 spotify = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(spotify)
 
-# Search
-results = spotify.search("Daft Punk", types="track", limit=3)
-
-# Playback
+results = spotify.search("Daft Punk", types="track", limit=5)
 spotify.play(uris=["spotify:track:xxx"])
 spotify.pause()
 spotify.skip()
 np = spotify.now_playing()
-
-# Playlists
 spotify.create_playlist("Weekend Vibes", description="Chill tracks")
 spotify.add_to_playlist("playlist_id", ["spotify:track:xxx"])
 spotify.remove_from_playlist("playlist_id", ["spotify:track:xxx"])
-
-# Library
-spotify.save_to_library(["track_id_1", "track_id_2"])
-spotify.remove_from_library(["track_id_1"])
-
-# User data
+spotify.save_to_library(["spotify:track:xxx", "spotify:album:yyy"])
+spotify.remove_from_library(["spotify:track:xxx"])
 spotify.top_tracks(time_range="short_term")
 spotify.recently_played()
 ```
@@ -102,16 +90,17 @@ Token refresh is automatic — no manual intervention needed.
 ### Create a themed playlist
 1. Search for tracks matching the theme
 2. `create_playlist("name")` → get playlist ID
-3. `add_to_playlist(playlist_id, uris)`
+3. `add_to_playlist(playlist_id, uris)` — max 100 per call
 
 ### Check listening history
 - `top_tracks(time_range="short_term")` — last 4 weeks
 - `top_tracks(time_range="medium_term")` — last 6 months
 - `recently_played()` — last 50 tracks
 
-## API Notes
+## Key API Notes
 
-- Tokens expire every hour; the script auto-refreshes
+- Tokens expire every hour; the script auto-refreshes on 401 or near-expiry
+- 429 rate limits are auto-retried with Retry-After
 - Playback control requires an active Spotify session (Premium)
-- Rate limits: back off on 429 responses
-- **Feb 2026 breaking changes** apply — see `references/api-changes-2026.md` if you hit playlist/library endpoint issues
+- Search max limit is **10** per request (paginate with offset for more)
+- **Feb 2026 breaking changes** are fully handled in the scripts. If you encounter 403/404, see `references/api-changes-2026.md`

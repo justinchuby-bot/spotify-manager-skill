@@ -24,6 +24,7 @@ import base64
 import http.server
 import json
 import os
+import secrets
 import sys
 import urllib.parse
 import urllib.request
@@ -46,6 +47,7 @@ SCOPES = " ".join([
 ])
 
 auth_code = None
+auth_error = None
 
 
 def load_credentials(creds_path=None):
@@ -80,9 +82,19 @@ def load_credentials(creds_path=None):
 
 class CallbackHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        global auth_code
+        global auth_code, auth_error
         query = urllib.parse.urlparse(self.path).query
         params = urllib.parse.parse_qs(query)
+
+        # CSRF check: verify state matches
+        returned_state = params.get("state", [None])[0]
+        if returned_state != self.server.expected_state:
+            self.send_response(400)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"<html><body><h1>Error: state mismatch (possible CSRF). Try again.</h1></body></html>")
+            auth_error = "state mismatch"
+            return
 
         if "code" in params:
             auth_code = params["code"][0]
@@ -91,6 +103,7 @@ class CallbackHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"<html><body><h1>Success! You can close this tab.</h1></body></html>")
         elif "error" in params:
+            auth_error = params["error"][0]
             self.send_response(400)
             self.send_header("Content-Type", "text/html")
             self.end_headers()
@@ -138,12 +151,16 @@ def main():
     parsed = urllib.parse.urlparse(redirect_uri)
     port = parsed.port or 8888
 
+    # Generate random state for CSRF protection
+    state = secrets.token_urlsafe(32)
+
     # Build auth URL
     params = urllib.parse.urlencode({
         "client_id": client_id,
         "response_type": "code",
         "redirect_uri": redirect_uri,
         "scope": SCOPES,
+        "state": state,
     })
     auth_url = f"https://accounts.spotify.com/authorize?{params}"
 
@@ -151,14 +168,19 @@ def main():
     print(f"\nOpen this URL in your browser:\n")
     print(f"  {auth_url}\n")
 
-    # Start callback server
+    # Start callback server with expected state
     server = http.server.HTTPServer(("127.0.0.1", port), CallbackHandler)
+    server.expected_state = state
     print(f"Waiting for callback on {redirect_uri} ...")
 
-    while auth_code is None:
+    while auth_code is None and auth_error is None:
         server.handle_request()
 
     server.server_close()
+
+    if auth_error:
+        print(f"\nAuthorization failed: {auth_error}", file=sys.stderr)
+        sys.exit(1)
 
     # Exchange code for tokens
     print("\nExchanging code for tokens...")
@@ -173,6 +195,7 @@ def main():
     print(f"\nToken saved to {args.token_file}")
     print(f"  Access token expires in {tokens.get('expires_in', '?')} seconds")
     print(f"  Refresh token: {'yes' if tokens.get('refresh_token') else 'no'}")
+    print(f"  Scopes: {tokens.get('scope', '?')}")
 
 
 if __name__ == "__main__":

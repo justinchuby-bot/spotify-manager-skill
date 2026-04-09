@@ -1,13 +1,15 @@
 # openclaw-spotify
 
-A Spotify skill for [OpenClaw](https://github.com/openclaw) — search, playlists, playback control, library management, and listening history.
+A Spotify skill for [OpenClaw](https://github.com/openclaw/openclaw) — search, playlists, playback control, library management, and listening history.
+
+Fully compliant with Spotify's **February 2026 API changes**.
 
 ## Features
 
 - **Search** — tracks, albums, artists
 - **Playback** — play, pause, skip, queue, now playing, devices
 - **Playlists** — create, list, add/remove items
-- **Library** — save/remove tracks, albums, episodes
+- **Library** — save/remove any item type (unified endpoint)
 - **User data** — top tracks/artists, recently played
 
 ## Install
@@ -16,12 +18,13 @@ A Spotify skill for [OpenClaw](https://github.com/openclaw) — search, playlist
 clawhub install justinchuby-bot/openclaw-spotify
 ```
 
-Or manually copy the `spotify/` folder into your OpenClaw skills directory.
+Or manually copy the `spotify/` folder into your OpenClaw skills directory (`~/.openclaw/skills/` or `<workspace>/skills/`).
 
 ## Setup
 
 1. **Create a Spotify app** at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
    - Set redirect URI to `http://127.0.0.1:8888/callback`
+   - Go to Settings → User Management → add your Spotify email
 
 2. **Save credentials:**
    ```bash
@@ -41,22 +44,28 @@ Or manually copy the `spotify/` folder into your OpenClaw skills directory.
 ## Quick Test
 
 ```bash
-python3 spotify/scripts/spotify-api.py search "Bohemian Rhapsody"
-python3 spotify/scripts/spotify-api.py now-playing
-python3 spotify/scripts/spotify-api.py playlists
+python3 spotify/scripts/spotify_api.py search "Bohemian Rhapsody"
+python3 spotify/scripts/spotify_api.py now-playing
+python3 spotify/scripts/spotify_api.py playlists
+python3 spotify/scripts/spotify_api.py top-tracks
+python3 spotify/scripts/spotify_api.py save spotify:track:6rqhFgbbKwnb9MLmUQDhG6
 ```
 
 ## Requirements
 
 - Python 3.7+ (stdlib only — no pip dependencies)
-- Spotify Premium (required for playback control in Dev Mode)
+- Spotify Premium (required for playback control and Dev Mode apps)
 - Linux or macOS
 
-## Notes
+## Feb 2026 API Changes
 
-- Tokens auto-refresh (they expire every hour)
-- New Spotify apps use [Dev Mode](https://developer.spotify.com/documentation/web-api) — max 5 users, Premium required for app owner
-- Uses the **Feb 2026 API** (`/playlists/{id}/items` instead of `/tracks`). See `spotify/references/api-changes-2026.md` for details.
+This skill is fully updated for Spotify's February 2026 breaking changes:
+- Playlist endpoints: `/tracks` → `/items`
+- Library endpoints: unified `PUT/DELETE /me/library` with Spotify URIs
+- Search limit reduced to 10 per request
+- Many batch/browse endpoints removed
+
+See [`spotify/references/api-changes-2026.md`](spotify/references/api-changes-2026.md) for full details.
 
 ## License
 
