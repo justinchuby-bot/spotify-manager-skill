@@ -1,4 +1,4 @@
-# openclaw-spotify
+# spotify-manager-skill
 
 A Spotify skill for [OpenClaw](https://github.com/openclaw/openclaw) — search, playlists, playback control, library management, and listening history.
 
@@ -15,7 +15,7 @@ Fully compliant with Spotify's **February 2026 API changes**.
 ## Install
 
 ```bash
-clawhub install justinchuby-bot/openclaw-spotify
+clawhub install justinchuby-bot/spotify-manager-skill
 ```
 
 Or manually copy the `spotify/` folder into your OpenClaw skills directory (`~/.openclaw/skills/` or `<workspace>/skills/`).
