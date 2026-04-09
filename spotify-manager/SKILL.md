@@ -1,5 +1,5 @@
 ---
-name: spotify
+name: spotify-manager
 description: Control Spotify — search, playlists, playback, library, user data. Use when user asks to play music, create playlists, search for tracks/albums/artists, control playback (play/pause/skip/queue), manage their Spotify library (save/remove), or view listening history (top tracks, recently played). Requires user to complete OAuth setup first.
 ---
 

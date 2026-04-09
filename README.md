@@ -18,7 +18,7 @@ Fully compliant with Spotify's **February 2026 API changes**.
 clawhub install justinchuby-bot/spotify-manager-skill
 ```
 
-Or manually copy the `spotify/` folder into your OpenClaw skills directory (`~/.openclaw/skills/` or `<workspace>/skills/`).
+Or manually copy the `spotify-manager/` folder into your OpenClaw skills directory (`~/.openclaw/skills/` or `<workspace>/skills/`).
 
 ## Setup
 
@@ -43,18 +43,18 @@ Or manually copy the `spotify/` folder into your OpenClaw skills directory (`~/.
 
 3. **Authenticate:**
    ```bash
-   python3 spotify/scripts/spotify-auth.py --credentials ~/.openclaw/.spotify-credentials
+   python3 spotify-manager/scripts/spotify-auth.py --credentials ~/.openclaw/.spotify-credentials
    ```
    Opens a browser for OAuth. Tokens are saved to `~/.openclaw/.spotify-token.json`.
 
 ## Quick Test
 
 ```bash
-python3 spotify/scripts/spotify_api.py search "Bohemian Rhapsody"
-python3 spotify/scripts/spotify_api.py now-playing
-python3 spotify/scripts/spotify_api.py playlists
-python3 spotify/scripts/spotify_api.py top-tracks
-python3 spotify/scripts/spotify_api.py save spotify:track:6rqhFgbbKwnb9MLmUQDhG6
+python3 spotify-manager/scripts/spotify_api.py search "Bohemian Rhapsody"
+python3 spotify-manager/scripts/spotify_api.py now-playing
+python3 spotify-manager/scripts/spotify_api.py playlists
+python3 spotify-manager/scripts/spotify_api.py top-tracks
+python3 spotify-manager/scripts/spotify_api.py save spotify:track:6rqhFgbbKwnb9MLmUQDhG6
 ```
 
 ## Requirements
@@ -71,7 +71,7 @@ This skill is fully updated for Spotify's February 2026 breaking changes:
 - Search limit reduced to 10 per request
 - Many batch/browse endpoints removed
 
-See [`spotify/references/api-changes-2026.md`](spotify/references/api-changes-2026.md) for full details.
+See [`spotify-manager/references/api-changes-2026.md`](spotify-manager/references/api-changes-2026.md) for full details.
 
 ## License
 
