@@ -23,8 +23,14 @@ Or manually copy the `spotify/` folder into your OpenClaw skills directory (`~/.
 ## Setup
 
 1. **Create a Spotify app** at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
-   - Set redirect URI to `http://127.0.0.1:8888/callback`
-   - Go to Settings → User Management → add your Spotify email
+   - Click **Create app**
+   - **App name:** anything you like (e.g. "My OpenClaw")
+   - **App description:** anything (e.g. "Personal Spotify control")
+   - **Redirect URI:** `http://127.0.0.1:8888/callback` — click **Add**
+   - **Which API/SDKs are you planning to use?** Select **Web API**
+   - Check the ToS box and click **Save**
+   - Go to **Settings** → copy your **Client ID** and **Client Secret** (click "View client secret")
+   - Go to **Settings → User Management** → add your Spotify account email (required for Dev Mode apps to work)
 
 2. **Save credentials:**
    ```bash
